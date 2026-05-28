@@ -2,6 +2,17 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 
+function resolveSiteUrl(): URL {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const candidate = raw && raw.length > 0 ? raw : 'http://localhost:3000';
+  const withProtocol = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+  try {
+    return new URL(withProtocol);
+  } catch {
+    return new URL('http://localhost:3000');
+  }
+}
+
 export const metadata: Metadata = {
   title: {
     default: 'TechIndica · Recomendacoes de tecnologia',
@@ -9,7 +20,7 @@ export const metadata: Metadata = {
   },
   description:
     'Curadoria de produtos de tecnologia: smartwatches, fones, notebooks e mais. Com links de afiliado Shopee e Mercado Livre.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: resolveSiteUrl(),
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
