@@ -6,6 +6,7 @@ import { LogoutButton } from './logout-button';
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: 'package', href: '/admin' },
   { key: 'produtos', label: 'Produtos', icon: 'shoppingCart', href: '/admin/produtos' },
+  { key: 'posts', label: 'Posts', icon: 'sparkles', href: '/admin/posts' },
   { key: 'automacao', label: 'Automacao', icon: 'zap', href: '/admin/automacao' },
   { key: 'config', label: 'Configuracoes', icon: 'menu', href: '/admin/config' },
 ] as const;
@@ -17,7 +18,7 @@ export function AdminShell({
   actions,
   children,
 }: {
-  current: 'dashboard' | 'produtos' | 'automacao' | 'config';
+  current: 'dashboard' | 'produtos' | 'posts' | 'automacao' | 'config';
   title: string;
   subtitle?: string;
   actions?: ReactNode;

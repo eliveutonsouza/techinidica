@@ -1,0 +1,247 @@
+import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { createClient } from '@/lib/supabase/server';
+import { PostSchema, CategoriaSchema, ProdutoSchema, type Post, type Categoria, type Produto } from '@/schemas';
+import { PublicHeader } from '@/components/public/header';
+import { PublicFooter } from '@/components/public/footer';
+import { ProductImage } from '@/components/product/product-image';
+import { AffiliateDisclosure } from '@/components/product/affiliate-disclosure';
+
+export const revalidate = 60;
+
+type Params = Promise<{ slug: string }>;
+
+async function load(
+  slug: string,
+): Promise<{ post: Post | null; produtos: Map<number, Produto>; categorias: Categoria[] }> {
+  const supabase = await createClient();
+  const [postRes, catsRes] = await Promise.all([
+    supabase.from('posts').select('*').eq('slug', slug).eq('publicado', true).maybeSingle(),
+    supabase.from('categorias').select('*').order('ordem'),
+  ]);
+  const parsed = postRes.data ? PostSchema.safeParse(postRes.data) : null;
+  const post = parsed?.success ? parsed.data : null;
+  const categorias = (catsRes.data ?? [])
+    .map((c) => CategoriaSchema.safeParse(c))
+    .filter((r) => r.success)
+    .map((r) => r.data as Categoria);
+
+  let produtos = new Map<number, Produto>();
+  if (post && post.produto_ids.length > 0) {
+    const { data: prods } = await supabase.from('produtos').select('*').in('id', post.produto_ids);
+    for (const row of prods ?? []) {
+      const r = ProdutoSchema.safeParse(row);
+      if (r.success) produtos.set(r.data.id, r.data);
+    }
+  }
+  return { post, produtos, categorias };
+}
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('posts')
+    .select('titulo, subtitulo, intro')
+    .eq('slug', slug)
+    .eq('publicado', true)
+    .maybeSingle();
+  if (!data) return { title: 'Post' };
+  return {
+    title: data.titulo,
+    description: data.subtitulo ?? data.intro?.slice(0, 160),
+  };
+}
+
+export default async function PostPage({ params }: { params: Params }) {
+  const { slug } = await params;
+  const { post, produtos, categorias } = await load(slug);
+  if (!post) notFound();
+
+  return (
+    <>
+      <PublicHeader categorias={categorias} />
+      <main style={{ maxWidth: 880, margin: '0 auto', padding: '32px 24px' }}>
+        <span
+          style={{
+            display: 'inline-block',
+            background: '#eff6ff',
+            color: '#1d4ed8',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '4px 10px',
+            borderRadius: 99,
+            marginBottom: 14,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}
+        >
+          {post.angulo}
+        </span>
+        <h1
+          style={{
+            fontFamily: 'Sora, system-ui, sans-serif',
+            fontSize: 36,
+            lineHeight: 1.2,
+            color: '#0f172a',
+            margin: '0 0 12px',
+          }}
+        >
+          {post.titulo}
+        </h1>
+        {post.subtitulo && (
+          <p
+            style={{
+              fontFamily: 'DM Sans, system-ui, sans-serif',
+              fontSize: 18,
+              color: '#475569',
+              margin: '0 0 16px',
+              lineHeight: 1.5,
+            }}
+          >
+            {post.subtitulo}
+          </p>
+        )}
+        <p
+          style={{
+            fontFamily: 'DM Sans, system-ui, sans-serif',
+            fontSize: 16,
+            color: '#334155',
+            lineHeight: 1.7,
+            whiteSpace: 'pre-line',
+            margin: '0 0 32px',
+          }}
+        >
+          {post.intro}
+        </p>
+
+        <AffiliateDisclosure />
+
+        <section style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {post.itens.map((item) => {
+            const produto = produtos.get(item.produto_id);
+            return (
+              <article
+                key={item.produto_id}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 14,
+                  padding: 20,
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: 20,
+                  alignItems: 'start',
+                }}
+              >
+                <div>
+                  <ProductImage
+                    categoria={produto?.categoria ?? post.categoria}
+                    imagemUrl={produto?.imagem_url ?? null}
+                    height={160}
+                    rounded={10}
+                  />
+                </div>
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      marginBottom: 6,
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 12,
+                      color: '#64748b',
+                    }}
+                  >
+                    #{item.posicao}
+                    {produto?.preco_atual != null && (
+                      <span style={{ color: '#0f172a', fontWeight: 600 }}>
+                        R$ {Number(produto.preco_atual).toFixed(2).replace('.', ',')}
+                      </span>
+                    )}
+                  </div>
+                  <h2
+                    style={{
+                      fontFamily: 'Sora, system-ui, sans-serif',
+                      fontSize: 18,
+                      color: '#0f172a',
+                      margin: '0 0 6px',
+                    }}
+                  >
+                    {item.titulo_item}
+                  </h2>
+                  <p
+                    style={{
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontSize: 14,
+                      color: '#334155',
+                      lineHeight: 1.6,
+                      margin: '0 0 10px',
+                    }}
+                  >
+                    {item.resumo}
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontSize: 13,
+                      color: '#1e293b',
+                      lineHeight: 1.5,
+                      margin: '0 0 14px',
+                      padding: '8px 12px',
+                      background: '#f8fafc',
+                      borderLeft: '3px solid #3b82f6',
+                      borderRadius: 6,
+                    }}
+                  >
+                    {item.destaque}
+                  </p>
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="nofollow sponsored noopener"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#f05d23',
+                      color: '#fff',
+                      padding: '9px 16px',
+                      borderRadius: 8,
+                      textDecoration: 'none',
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontWeight: 600,
+                      fontSize: 13.5,
+                    }}
+                  >
+                    Ver na Shopee
+                  </a>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        {post.conclusao && (
+          <section style={{ marginTop: 32 }}>
+            <p
+              style={{
+                fontFamily: 'DM Sans, system-ui, sans-serif',
+                fontSize: 16,
+                color: '#334155',
+                lineHeight: 1.7,
+                whiteSpace: 'pre-line',
+                margin: 0,
+              }}
+            >
+              {post.conclusao}
+            </p>
+          </section>
+        )}
+      </main>
+      <PublicFooter categorias={categorias} />
+    </>
+  );
+}

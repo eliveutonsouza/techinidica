@@ -135,17 +135,35 @@ supabase/migrations/
 - [x] Schema Supabase com RLS e seed
 - [x] Auth admin via cookie httpOnly (`iron-session`)
 - [x] Middleware protegendo `/admin/*`
-- [x] Public pages SSR (home, categoria, produto) com SEO
+- [x] Public pages SSR (home, categoria, produto, post) com SEO
 - [x] Admin CRUD de produtos: toggle publicado/destaque, excluir
 - [x] Coleta Shopee (HMAC-SHA1, GraphQL, normalizacao de precos)
 - [x] Geracao de copy GPT-4o (JSON mode + Zod parse) — single e bulk
+- [x] **Posts curados pela IA**: pool diverso (mais vendidos + melhor avaliados + maior comissao), GPT-4o escolhe angulo editorial e escreve 5-10 itens
+- [x] **Agendamento `pg_cron`** disparando `/api/cron/generate-post` diariamente
 - [x] Logs de execucao em `execucoes_log`
 - [x] Validacao Zod em **toda** entrada (forms, API responses, DB rows)
 - [x] Testes unitarios (Vitest): 22 testes cobrindo HMAC, normalizacao, schemas
 
+## Geracao automatica de posts curados
+
+Fluxo (cron diario ou disparo manual em `/admin/automacao`):
+
+1. Le credenciais Shopee da tabela `affiliate_config`
+2. `fetchShopeePool()` chama 3 buckets em paralelo: `sortType=2` (vendas), `sortType=3` (rating), `sortType=4` (comissao); deduplica por `itemId`
+3. Upsert dos produtos em `produtos`
+4. `generateCuratedPost()` envia o pool ao GPT-4o, que escolhe um angulo editorial diversificado (ex "Top smartphones custo-beneficio", "Fones premium para home office"), seleciona 5-10 produtos e escreve titulo, intro, item por item e conclusao
+5. Persiste em `posts`, gera slug unico, publica e revalida rotas
+
+Agendamento via `supabase/migrations/0003_pg_cron.sql` (edite `EDITAR-SITE-URL` e `EDITAR-CRON-SECRET` antes de aplicar). Teste manual:
+
+```bash
+curl -X POST "https://seu-site.com/api/cron/generate-post" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
 ## Pos-MVP (nao implementado)
 
 - Mercado Livre Afiliados
-- pg_cron para coleta diaria automatica
 - Sentry / observabilidade
 - Newsletter

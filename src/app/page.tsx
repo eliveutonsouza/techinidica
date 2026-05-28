@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { ProdutoSchema, CategoriaSchema, type Produto, type Categoria } from '@/schemas';
+import { ProdutoSchema, CategoriaSchema, PostSchema, type Produto, type Categoria, type Post } from '@/schemas';
 import { ProductCard } from '@/components/product/product-card';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -7,9 +7,14 @@ import Link from 'next/link';
 
 export const revalidate = 60;
 
-async function loadData(): Promise<{ destaques: Produto[]; produtos: Produto[]; categorias: Categoria[] }> {
+async function loadData(): Promise<{
+  destaques: Produto[];
+  produtos: Produto[];
+  categorias: Categoria[];
+  posts: Post[];
+}> {
   const supabase = await createClient();
-  const [destaquesRes, recentesRes, catsRes] = await Promise.all([
+  const [destaquesRes, recentesRes, catsRes, postsRes] = await Promise.all([
     supabase
       .from('produtos')
       .select('*')
@@ -24,6 +29,12 @@ async function loadData(): Promise<{ destaques: Produto[]; produtos: Produto[]; 
       .order('updated_at', { ascending: false })
       .limit(9),
     supabase.from('categorias').select('*').order('ordem'),
+    supabase
+      .from('posts')
+      .select('*')
+      .eq('publicado', true)
+      .order('created_at', { ascending: false })
+      .limit(4),
   ]);
 
   const destaques = (destaquesRes.data ?? [])
@@ -38,12 +49,16 @@ async function loadData(): Promise<{ destaques: Produto[]; produtos: Produto[]; 
     .map((c) => CategoriaSchema.safeParse(c))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
+  const posts = (postsRes.data ?? [])
+    .map((p) => PostSchema.safeParse(p))
+    .filter((r) => r.success)
+    .map((r) => r.data as Post);
 
-  return { destaques, produtos, categorias };
+  return { destaques, produtos, categorias, posts };
 }
 
 export default async function HomePage() {
-  const { destaques, produtos, categorias } = await loadData();
+  const { destaques, produtos, categorias, posts } = await loadData();
 
   return (
     <>
@@ -98,6 +113,91 @@ export default async function HomePage() {
             ))}
           </div>
         </section>
+
+        {posts.length > 0 && (
+          <section style={{ marginBottom: 40 }}>
+            <h2
+              style={{
+                fontFamily: 'Sora, system-ui, sans-serif',
+                fontSize: 22,
+                margin: '0 0 16px',
+                color: '#0f172a',
+              }}
+            >
+              Curadoria da semana
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+              {posts.map((post) => (
+                <Link
+                  key={post.id}
+                  href={`/post/${post.slug}`}
+                  style={{
+                    background: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    padding: 20,
+                    textDecoration: 'none',
+                    color: '#0f172a',
+                    display: 'block',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      padding: '3px 9px',
+                      borderRadius: 99,
+                      marginBottom: 10,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {post.angulo}
+                  </span>
+                  <h3
+                    style={{
+                      fontFamily: 'Sora, system-ui, sans-serif',
+                      fontSize: 18,
+                      margin: '0 0 8px',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {post.titulo}
+                  </h3>
+                  <p
+                    style={{
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontSize: 13.5,
+                      color: '#64748b',
+                      margin: 0,
+                      lineHeight: 1.5,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {post.intro}
+                  </p>
+                  <div
+                    style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 11.5,
+                      color: '#94a3b8',
+                      marginTop: 10,
+                    }}
+                  >
+                    {post.itens.length} produtos selecionados
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {destaques.length > 0 && (
           <section style={{ marginBottom: 40 }}>
