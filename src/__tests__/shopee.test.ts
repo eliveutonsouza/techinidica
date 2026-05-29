@@ -3,29 +3,30 @@ import crypto from 'node:crypto';
 import { buildShopeeAuthHeader, normalizePrice, buildAffiliateLink } from '@/lib/shopee';
 
 describe('buildShopeeAuthHeader', () => {
-  it('produces HMAC-SHA1 sign over appId+timestamp', () => {
+  it('produces SHA256(appId+timestamp+body+secret) signature', () => {
     const appId = 'app123';
     const secret = 'super-secret';
+    const body = '{"query":"{ test }"}';
     const timestamp = 1700000000;
-    const header = buildShopeeAuthHeader(appId, secret, timestamp);
+    const header = buildShopeeAuthHeader(appId, secret, body, timestamp);
 
     const expectedSign = crypto
-      .createHmac('sha1', secret)
-      .update(`${appId}${timestamp}`)
+      .createHash('sha256')
+      .update(`${appId}${timestamp}${body}${secret}`)
       .digest('hex');
 
-    expect(header).toBe(`SHA1 appid=${appId},timestamp=${timestamp},sign=${expectedSign}`);
+    expect(header).toBe(`SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${expectedSign}`);
   });
 
   it('produces a deterministic header for the same inputs', () => {
-    const a = buildShopeeAuthHeader('a', 'b', 1);
-    const b = buildShopeeAuthHeader('a', 'b', 1);
+    const a = buildShopeeAuthHeader('a', 'b', 'body', 1);
+    const b = buildShopeeAuthHeader('a', 'b', 'body', 1);
     expect(a).toBe(b);
   });
 
   it('produces different signs for different secrets', () => {
-    const a = buildShopeeAuthHeader('app', 'secret1', 100);
-    const b = buildShopeeAuthHeader('app', 'secret2', 100);
+    const a = buildShopeeAuthHeader('app', 'secret1', 'body', 100);
+    const b = buildShopeeAuthHeader('app', 'secret2', 'body', 100);
     expect(a).not.toBe(b);
   });
 });

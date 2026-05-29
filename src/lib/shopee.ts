@@ -5,20 +5,18 @@ const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql';
 const PRICE_DIVISOR = 100_000;
 
 /**
- * Constroi header Authorization no formato esperado pela Shopee:
- * "SHA1 appid=X,timestamp=Y,sign=Z"
- *
- * sign = HMAC-SHA1(secret, appId + timestamp) em hex.
- * Exportado para teste.
+ * SHA256(AppId + Timestamp + Payload + Secret)
+ * Ref: https://affiliate.shopee.com.br/open_api/home — Authentication section
  */
 export function buildShopeeAuthHeader(
   appId: string,
   secret: string,
+  body: string,
   timestamp: number = Math.floor(Date.now() / 1000),
 ): string {
-  const payload = `${appId}${timestamp}`;
-  const sign = crypto.createHmac('sha1', secret).update(payload).digest('hex');
-  return `SHA1 appid=${appId},timestamp=${timestamp},sign=${sign}`;
+  const factor = `${appId}${timestamp}${body}${secret}`;
+  const sign = crypto.createHash('sha256').update(factor).digest('hex');
+  return `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${sign}`;
 }
 
 /** Preco Shopee vem em micros (ex: 12990000 = R$ 129,90). Exportado para teste. */
@@ -81,16 +79,20 @@ export type FetchedProduct = {
 };
 
 async function callShopee(appId: string, secret: string, query: string): Promise<ShopeeProductNode[]> {
-  const auth = buildShopeeAuthHeader(appId, secret);
+  const bodyStr = JSON.stringify({ query });
+  const auth = buildShopeeAuthHeader(appId, secret, bodyStr);
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({ query }),
+    body: bodyStr,
   });
   if (!res.ok) {
     throw new Error(`Shopee API ${res.status}: ${await res.text()}`);
   }
   const json = await res.json();
+  if (json.errors) {
+    throw new Error(`Shopee GraphQL error: ${JSON.stringify(json.errors)}`);
+  }
   const parsed = ShopeeResponseSchema.parse(json);
   return parsed.data.productOfferV2.nodes;
 }

@@ -51,13 +51,14 @@ export async function testShopeeConnection(
   const parsed = SaveShopeeConfigSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Dados invalidos' };
 
-  const auth = buildShopeeAuthHeader(parsed.data.app_id, parsed.data.secret);
+  const body = JSON.stringify({
+    query: '{ productOfferV2(listType: 0, limit: 1, sortType: 2) { nodes { itemId } } }',
+  });
+  const auth = buildShopeeAuthHeader(parsed.data.app_id, parsed.data.secret, body);
   const res = await fetch('https://open-api.affiliate.shopee.com.br/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({
-      query: '{ productOfferV2(listType: 0, limit: 1, sortType: 2) { nodes { itemId } } }',
-    }),
+    body,
   });
 
   return { ok: true, data: { status: res.status } };
