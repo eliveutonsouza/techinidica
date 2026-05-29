@@ -126,7 +126,7 @@ export default async function HomePage() {
             >
               Curadoria da semana
             </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            <div className="grid-2col">
               {posts.map((post) => (
                 <Link
                   key={post.id}
@@ -211,7 +211,7 @@ export default async function HomePage() {
             >
               Destaques
             </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            <div className="grid-2col">
               {destaques.map((p) => (
                 <ProductCard key={p.id} produto={p} />
               ))}
@@ -233,7 +233,7 @@ export default async function HomePage() {
           {produtos.length === 0 ? (
             <EmptyState />
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div className="grid-3col">
               {produtos.map((p) => (
                 <ProductCard key={p.id} produto={p} />
               ))}

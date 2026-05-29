@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Categoria } from '@/schemas';
+import { HeaderSearch } from './header-search';
 
 export function PublicHeader({ categorias }: { categorias: Categoria[] }) {
   const main = categorias.slice(0, 4);
@@ -37,7 +38,7 @@ export function PublicHeader({ categorias }: { categorias: Categoria[] }) {
         >
           Tech<span style={{ color: '#2563eb' }}>Indica</span>
         </Link>
-        <nav style={{ display: 'flex', gap: 18, marginLeft: 12, flex: 1 }}>
+        <nav className="header-nav-links">
           <Link
             href="/"
             style={{
@@ -66,6 +67,7 @@ export function PublicHeader({ categorias }: { categorias: Categoria[] }) {
             </Link>
           ))}
         </nav>
+        <HeaderSearch />
       </div>
     </header>
   );
