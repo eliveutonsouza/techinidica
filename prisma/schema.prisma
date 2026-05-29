@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Categoria {
+  id       Int       @id @default(autoincrement())
+  slug     String    @unique
+  nome     String
+  icone    String?
+  ordem    Int       @default(0)
+  produtos Produto[]
+  posts    Post[]
+
+  @@map("categorias")
+}
+
+model Produto {
+  id                Int      @id @default(autoincrement())
+  plataforma        String
+  platform_id       String   @unique
+  nome              String
+  descricao_curta   String?
+  preco_atual       Decimal  @db.Decimal(10, 2)
+  preco_original    Decimal? @db.Decimal(10, 2)
+  desconto_pct      Int      @default(0)
+  link_shopee       String?
+  link_mercadolivre String?
+  imagem_url        String?
+  categoria         String?
+  specs             Json     @default("{}")
+  copy_gerada       String?
+  pros              Json     @default("[]")
+  contras           Json     @default("[]")
+  nota              Decimal? @db.Decimal(3, 1)
+  badge             String?
+  publicado         Boolean  @default(false)
+  destaque          Boolean  @default(false)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  categoriaRel Categoria? @relation(fields: [categoria], references: [slug], onDelete: SetNull)
+
+  @@index([categoria])
+  @@index([publicado])
+  @@index([destaque])
+  @@map("produtos")
+}
+
+model Post {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  titulo      String
+  subtitulo   String?
+  intro       String
+  conclusao   String?
+  angulo      String
+  categoria   String?
+  produto_ids Json     @default("[]")
+  itens       Json     @default("[]")
+  fonte       String   @default("cron")
+  publicado   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  categoriaRel Categoria? @relation(fields: [categoria], references: [slug], onDelete: SetNull)
+
+  @@index([publicado])
+  @@index([created_at(sort: Desc)])
+  @@index([categoria])
+  @@map("posts")
+}
+
+model AffiliateConfig {
+  id         Int      @id @default(autoincrement())
+  plataforma String   @unique
+  config     Json     @default("{}")
+  ativo      Boolean  @default(true)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("affiliate_config")
+}
+
+model ExecucaoLog {
+  id                   Int      @id @default(autoincrement())
+  plataforma           String
+  status               String
+  produtos_encontrados Int      @default(0)
+  produtos_publicados  Int      @default(0)
+  erro                 String?
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)])
+  @@map("execucoes_log")
+}
+
+model NewsletterSubscriber {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("newsletter_subscribers")
+}
+
+model AdminUser {
+  id         Int      @id @default(autoincrement())
+  user_id    String   @unique @db.Uuid
+  role       String   @default("editor")
+  nome       String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("admin_users")
+}

@@ -1,6 +1,7 @@
 import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { createServerClient } from '@supabase/ssr';
+import { prisma } from '@/lib/prisma';
 
 export type SessionData = {
   isAdmin?: boolean;
@@ -31,19 +32,23 @@ export async function isAuthed(): Promise<boolean> {
   const session = await getSession();
   if (session.isAdmin === true) return true;
 
-  // Supabase Auth path (multi-user)
+  // Supabase Auth path (multi-user) — DB query via Prisma
   try {
-    const supabase = await createClient();
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
+    );
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    const { data } = await supabase
-      .from('admin_users')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const adminUser = await prisma.adminUser.findUnique({
+      where: { user_id: user.id },
+      select: { id: true },
+    });
 
-    return data != null;
+    return adminUser !== null;
   } catch {
     return false;
   }

@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
+import { type Prisma } from '@prisma/client';
 import { ProdutoSchema, CategoriaSchema, type Produto, type Categoria } from '@/schemas';
 import { ProductCard } from '@/components/product/product-card';
 import { AffiliateDisclosure } from '@/components/product/affiliate-disclosure';
@@ -32,53 +33,49 @@ async function load(
   total: number;
   todas: Categoria[];
 }> {
-  const supabase = await createClient();
   const offset = (page - 1) * PAGE_SIZE;
 
-  let query = supabase
-    .from('produtos')
-    .select('*', { count: 'exact' })
-    .eq('publicado', true)
-    .eq('categoria', slug);
+  const where: Prisma.ProdutoWhereInput = {
+    publicado: true,
+    categoria: slug,
+    ...(plataforma === 'shopee' ? { link_shopee: { not: null } } : {}),
+    ...(plataforma === 'mercadolivre' ? { link_mercadolivre: { not: null } } : {}),
+  };
 
-  if (plataforma === 'shopee') query = query.not('link_shopee', 'is', null);
-  else if (plataforma === 'mercadolivre') query = query.not('link_mercadolivre', 'is', null);
+  const orderBy: Prisma.ProdutoOrderByWithRelationInput =
+    ordem === 'preco_asc' ? { preco_atual: 'asc' } :
+    ordem === 'desconto'  ? { desconto_pct: 'desc' } :
+    ordem === 'recente'   ? { created_at: 'desc' } :
+    { nota: 'desc' };
 
-  if (ordem === 'preco_asc') query = query.order('preco_atual', { ascending: true });
-  else if (ordem === 'desconto') query = query.order('desconto_pct', { ascending: false });
-  else if (ordem === 'recente') query = query.order('created_at', { ascending: false });
-  else query = query.order('nota', { ascending: false });
-
-  query = query.range(offset, offset + PAGE_SIZE - 1);
-
-  const [catRes, prodRes, allCatsRes] = await Promise.all([
-    supabase.from('categorias').select('*').eq('slug', slug).maybeSingle(),
-    query,
-    supabase.from('categorias').select('*').order('ordem'),
+  const [catRaw, prodRaw, total, todasRaw] = await prisma.$transaction([
+    prisma.categoria.findUnique({ where: { slug } }),
+    prisma.produto.findMany({ where, orderBy, skip: offset, take: PAGE_SIZE }),
+    prisma.produto.count({ where }),
+    prisma.categoria.findMany({ orderBy: { ordem: 'asc' } }),
   ]);
 
-  const catParsed = catRes.data ? CategoriaSchema.safeParse(catRes.data) : null;
-  const produtos = (prodRes.data ?? [])
-    .map((p) => ProdutoSchema.safeParse(p))
+  const catParsed = catRaw ? CategoriaSchema.safeParse(serializeDates(catRaw)) : null;
+  const produtos = prodRaw
+    .map((p) => ProdutoSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Produto);
-  const todas = (allCatsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const todas = todasRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
 
   return {
     categoria: catParsed?.success ? catParsed.data : null,
     produtos,
-    total: prodRes.count ?? 0,
+    total,
     todas,
   };
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase.from('categorias').select('nome').eq('slug', slug).maybeSingle();
+  const data = await prisma.categoria.findUnique({ where: { slug }, select: { nome: true } });
   if (!data) return { title: 'Categoria' };
   const year = new Date().getFullYear();
   return {

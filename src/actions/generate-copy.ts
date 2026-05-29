@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import { generateProductCopy } from '@/lib/openai';
 import { type ActionResult } from '@/schemas';
 
@@ -15,15 +15,12 @@ export async function generateCopyForProduto(
     return { ok: false, error: 'Nao autorizado' };
   }
 
-  const supabase = createAdminClient();
+  const produto = await prisma.produto.findUnique({
+    where: { id },
+    select: { id: true, nome: true, preco_atual: true, plataforma: true },
+  });
 
-  const { data: produto, error: prodErr } = await supabase
-    .from('produtos')
-    .select('id, nome, preco_atual, plataforma')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (prodErr || !produto) {
+  if (!produto) {
     return { ok: false, error: 'Produto nao encontrado' };
   }
 
@@ -39,22 +36,24 @@ export async function generateCopyForProduto(
     return { ok: false, error: msg };
   }
 
-  const { error: updErr } = await supabase
-    .from('produtos')
-    .update({
-      categoria: result.categoria,
-      descricao_curta: result.descricao_curta,
-      copy_gerada: result.copy_gerada,
-      badge: result.badge,
-      nota: result.nota,
-      pros: result.pros,
-      contras: result.contras,
-      specs: result.specs,
-      publicado: true,
-    })
-    .eq('id', id);
-
-  if (updErr) return { ok: false, error: updErr.message };
+  try {
+    await prisma.produto.update({
+      where: { id },
+      data: {
+        categoria: result.categoria,
+        descricao_curta: result.descricao_curta,
+        copy_gerada: result.copy_gerada,
+        badge: result.badge,
+        nota: result.nota !== undefined ? String(result.nota) : undefined,
+        pros: result.pros,
+        contras: result.contras,
+        specs: result.specs,
+        publicado: true,
+      },
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro ao salvar' };
+  }
 
   revalidatePath('/');
   revalidatePath('/admin/produtos');
@@ -76,7 +75,6 @@ export async function generateCopyBulk(
     const r = await generateCopyForProduto(id);
     if (r.ok) sucesso++;
     else falhas++;
-    // Pequeno delay pra respeitar rate limits
     await new Promise((res) => setTimeout(res, 400));
   }
 

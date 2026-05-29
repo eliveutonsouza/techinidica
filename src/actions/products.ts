@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import {
   ToggleProdutoSchema,
   DeleteProdutoSchema,
@@ -23,13 +23,11 @@ export async function togglePublicado(
   const parsed = ToggleProdutoSchema.safeParse({ id, value });
   if (!parsed.success) return { ok: false, error: 'Dados invalidos' };
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from('produtos')
-    .update({ publicado: parsed.data.value })
-    .eq('id', parsed.data.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.produto.update({ where: { id: parsed.data.id }, data: { publicado: parsed.data.value } });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
 
   revalidatePath('/');
   revalidatePath('/admin/produtos');
@@ -49,13 +47,11 @@ export async function toggleDestaque(
   const parsed = ToggleProdutoSchema.safeParse({ id, value });
   if (!parsed.success) return { ok: false, error: 'Dados invalidos' };
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from('produtos')
-    .update({ destaque: parsed.data.value })
-    .eq('id', parsed.data.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.produto.update({ where: { id: parsed.data.id }, data: { destaque: parsed.data.value } });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
 
   revalidatePath('/');
   revalidatePath('/admin/produtos');
@@ -72,13 +68,11 @@ export async function deleteProduto(id: number): Promise<ActionResult<null>> {
   const parsed = DeleteProdutoSchema.safeParse({ id });
   if (!parsed.success) return { ok: false, error: 'Dados invalidos' };
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from('produtos')
-    .delete()
-    .eq('id', parsed.data.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.produto.delete({ where: { id: parsed.data.id } });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
 
   revalidatePath('/');
   revalidatePath('/admin/produtos');
@@ -98,13 +92,14 @@ export async function setMercadoLivreLink(
   const parsed = SetMLLinkSchema.safeParse({ id, link_mercadolivre: link || null });
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Dados invalidos' };
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from('produtos')
-    .update({ link_mercadolivre: parsed.data.link_mercadolivre })
-    .eq('id', parsed.data.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.produto.update({
+      where: { id: parsed.data.id },
+      data: { link_mercadolivre: parsed.data.link_mercadolivre },
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
 
   revalidatePath('/');
   revalidatePath('/admin/produtos');

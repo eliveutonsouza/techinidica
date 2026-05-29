@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { ProdutoSchema, CategoriaSchema, type Produto, type Categoria } from '@/schemas';
 import { ProductImage } from '@/components/product/product-image';
 import { BuyButtons } from '@/components/product/buy-buttons';
@@ -15,19 +15,13 @@ export const revalidate = 60;
 type Params = Promise<{ id: string }>;
 
 async function load(id: string): Promise<{ produto: Produto | null; categorias: Categoria[] }> {
-  const supabase = await createClient();
-  const [prodRes, catsRes] = await Promise.all([
-    supabase
-      .from('produtos')
-      .select('*')
-      .eq('id', Number(id))
-      .eq('publicado', true)
-      .maybeSingle(),
-    supabase.from('categorias').select('*').order('ordem'),
+  const [prodRaw, catsRaw] = await prisma.$transaction([
+    prisma.produto.findFirst({ where: { id: Number(id), publicado: true } }),
+    prisma.categoria.findMany({ orderBy: { ordem: 'asc' } }),
   ]);
-  const parsed = prodRes.data ? ProdutoSchema.safeParse(prodRes.data) : null;
-  const categorias = (catsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const parsed = prodRaw ? ProdutoSchema.safeParse(serializeDates(prodRaw)) : null;
+  const categorias = catsRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
   return { produto: parsed?.success ? parsed.data : null, categorias };
@@ -35,13 +29,10 @@ async function load(id: string): Promise<{ produto: Produto | null; categorias: 
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('produtos')
-    .select('nome, descricao_curta, imagem_url')
-    .eq('id', Number(id))
-    .eq('publicado', true)
-    .maybeSingle();
+  const data = await prisma.produto.findFirst({
+    where: { id: Number(id), publicado: true },
+    select: { nome: true, descricao_curta: true, imagem_url: true },
+  });
   if (!data) return { title: 'Produto' };
   return {
     title: `${data.nome} — Vale a pena? Análise completa`,

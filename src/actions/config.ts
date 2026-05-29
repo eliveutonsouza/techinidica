@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import {
   SaveShopeeConfigSchema,
   type ActionResult,
@@ -24,16 +24,15 @@ export async function saveShopeeConfig(
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dados invalidos' };
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase.from('affiliate_config').upsert(
-    {
-      plataforma: 'shopee',
-      config: parsed.data,
-      ativo: parsed.data.ativo,
-    },
-    { onConflict: 'plataforma' },
-  );
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.affiliateConfig.upsert({
+      where: { plataforma: 'shopee' },
+      update: { config: parsed.data, ativo: parsed.data.ativo },
+      create: { plataforma: 'shopee', config: parsed.data, ativo: parsed.data.ativo },
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro ao salvar' };
+  }
 
   revalidatePath('/admin/config');
   return { ok: true, data: null };

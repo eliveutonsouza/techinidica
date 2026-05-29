@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { ProdutoSchema, CategoriaSchema, type Produto, type Categoria } from '@/schemas';
 import { ProductCard } from '@/components/product/product-card';
 import { PublicHeader } from '@/components/public/header';
@@ -25,17 +25,20 @@ export async function generateMetadata({
 
 async function search(q: string): Promise<Produto[]> {
   if (!q.trim()) return [];
-  const supabase = await createClient();
-  const term = `%${q.trim()}%`;
-  const { data } = await supabase
-    .from('produtos')
-    .select('*')
-    .eq('publicado', true)
-    .or(`nome.ilike.${term},descricao_curta.ilike.${term}`)
-    .order('nota', { ascending: false })
-    .limit(24);
-  return (data ?? [])
-    .map((p) => ProdutoSchema.safeParse(p))
+  const term = q.trim();
+  const rows = await prisma.produto.findMany({
+    where: {
+      publicado: true,
+      OR: [
+        { nome: { contains: term, mode: 'insensitive' } },
+        { descricao_curta: { contains: term, mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { nota: 'desc' },
+    take: 24,
+  });
+  return rows
+    .map((p) => ProdutoSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Produto);
 }
@@ -46,13 +49,12 @@ export default async function BuscaPage({
   searchParams: SearchParams;
 }) {
   const { q = '' } = await searchParams;
-  const supabase = await createClient();
-  const [resultados, catsRes] = await Promise.all([
+  const [resultados, catsRaw] = await Promise.all([
     search(q),
-    supabase.from('categorias').select('*').order('ordem'),
+    prisma.categoria.findMany({ orderBy: { ordem: 'asc' } }),
   ]);
-  const categorias = (catsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const categorias = catsRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
 

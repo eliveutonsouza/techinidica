@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { ExecucaoLogSchema, type ExecucaoLog } from '@/schemas';
 import { AutomacaoControls } from './automacao-controls';
@@ -8,14 +8,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Automacao', robots: { index: false, follow: false } };
 
 async function load(): Promise<ExecucaoLog[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('execucoes_log')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(20);
-  return (data ?? [])
-    .map((r) => ExecucaoLogSchema.safeParse(r))
+  const rows = await prisma.execucaoLog.findMany({ orderBy: { created_at: 'desc' }, take: 20 });
+  return rows
+    .map((r) => ExecucaoLogSchema.safeParse(serializeDates(r)))
     .filter((r) => r.success)
     .map((r) => r.data as ExecucaoLog);
 }

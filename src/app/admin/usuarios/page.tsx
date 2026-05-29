@@ -1,4 +1,5 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
+import { createClient } from '@supabase/supabase-js';
 import { AdminShell } from '@/components/admin/admin-shell';
 
 export const dynamic = 'force-dynamic';
@@ -14,20 +15,29 @@ interface AdminUser {
 }
 
 async function loadUsers(): Promise<AdminUser[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('admin_users')
-    .select('id, user_id, role, nome, created_at')
-    .order('created_at');
+  const rows = await prisma.adminUser.findMany({
+    select: { id: true, user_id: true, role: true, nome: true, created_at: true },
+    orderBy: { created_at: 'asc' },
+  });
 
-  if (!data) return [];
+  if (rows.length === 0) return [];
 
-  const { data: authData } = await supabase.auth.admin.listUsers();
+  // Auth Admin API stays on supabase-js (service_role) — not a DB query
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
   const emailMap = new Map(
     (authData?.users ?? []).map((u) => [u.id, u.email ?? '']),
   );
 
-  return data.map((u) => ({ ...u, email: emailMap.get(u.user_id) }));
+  return rows.map((u) => ({
+    ...u,
+    created_at: u.created_at.toISOString(),
+    email: emailMap.get(u.user_id),
+  }));
 }
 
 export default async function AdminUsuariosPage() {

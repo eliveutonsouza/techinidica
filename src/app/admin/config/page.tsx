@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { SaveShopeeConfigSchema } from '@/schemas';
 import { ConfigForm } from './config-form';
@@ -7,12 +7,10 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Configuracoes', robots: { index: false, follow: false } };
 
 async function loadShopeeConfig() {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('affiliate_config')
-    .select('config, ativo')
-    .eq('plataforma', 'shopee')
-    .maybeSingle();
+  const data = await prisma.affiliateConfig.findUnique({
+    where: { plataforma: 'shopee' },
+    select: { config: true, ativo: true },
+  });
   if (!data) {
     return { app_id: '', secret: '', tracking_id: 'techindica_main', ativo: true };
   }

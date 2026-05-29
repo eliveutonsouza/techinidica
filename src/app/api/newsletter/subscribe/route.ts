@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import { NewsletterSubscribeSchema } from '@/schemas';
 
 export const dynamic = 'force-dynamic';
@@ -17,12 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: parsed.error.errors[0]?.message ?? 'E-mail inválido' }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from('newsletter_subscribers')
-    .upsert({ email: parsed.data.email, ativo: true }, { onConflict: 'email' });
-
-  if (error) {
+  try {
+    await prisma.newsletterSubscriber.upsert({
+      where: { email: parsed.data.email },
+      update: { ativo: true },
+      create: { email: parsed.data.email, ativo: true },
+    });
+  } catch {
     return NextResponse.json({ ok: false, error: 'Erro ao salvar e-mail.' }, { status: 500 });
   }
 

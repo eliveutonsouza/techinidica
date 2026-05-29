@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { ProdutoSchema, CategoriaSchema, type Produto, type Categoria } from '@/schemas';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -17,15 +17,12 @@ type SearchParams = Promise<{ a?: string; b?: string }>;
 
 async function loadProdutos(ids: number[]): Promise<Map<number, Produto>> {
   if (ids.length === 0) return new Map();
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('produtos')
-    .select('*')
-    .in('id', ids)
-    .eq('publicado', true);
+  const rows = await prisma.produto.findMany({
+    where: { id: { in: ids }, publicado: true },
+  });
   const map = new Map<number, Produto>();
-  for (const row of data ?? []) {
-    const r = ProdutoSchema.safeParse(row);
+  for (const row of rows) {
+    const r = ProdutoSchema.safeParse(serializeDates(row));
     if (r.success) map.set(r.data.id, r.data);
   }
   return map;
@@ -36,10 +33,9 @@ export default async function CompararPage({ searchParams }: { searchParams: Sea
   const idA = a ? parseInt(a, 10) : null;
   const idB = b ? parseInt(b, 10) : null;
 
-  const supabase = await createClient();
-  const catsRes = await supabase.from('categorias').select('*').order('ordem');
-  const categorias = (catsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const catsRaw = await prisma.categoria.findMany({ orderBy: { ordem: 'asc' } });
+  const categorias = catsRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
 

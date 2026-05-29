@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { ProdutoSchema, type Produto } from '@/schemas';
 import { ProdutosTable } from './produtos-table';
@@ -7,13 +7,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Produtos', robots: { index: false, follow: false } };
 
 async function load(): Promise<Produto[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('produtos')
-    .select('*')
-    .order('created_at', { ascending: false });
-  return (data ?? [])
-    .map((p) => ProdutoSchema.safeParse(p))
+  const rows = await prisma.produto.findMany({ orderBy: { created_at: 'desc' } });
+  return rows
+    .map((p) => ProdutoSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Produto);
 }

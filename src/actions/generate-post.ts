@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma } from '@/lib/prisma';
 import { fetchShopeePool } from '@/lib/shopee';
 import { generateCuratedPost } from '@/lib/openai';
 import { SaveShopeeConfigSchema, type ActionResult, type PostItem } from '@/schemas';
@@ -14,16 +14,6 @@ type GeneratePostResult = {
   itens: number;
 };
 
-/**
- * Fluxo completo:
- * 1. Le credenciais Shopee (DB > env fallback)
- * 2. Coleta pool diverso (mais vendidos + melhor avaliados + maior comissao)
- * 3. Upsert produtos no banco (precisa do id pra referenciar)
- * 4. Manda pool pro GPT-4o, que escolhe angulo + seleciona itens + escreve copy
- * 5. Persiste posts, publica e revalida rotas
- *
- * `fonte` = 'cron' quando chamado pelo route handler agendado, 'manual' do admin.
- */
 export async function generatePost(
   fonte: 'cron' | 'manual' = 'manual',
 ): Promise<ActionResult<GeneratePostResult>> {
@@ -35,14 +25,11 @@ export async function generatePost(
     }
   }
 
-  const supabase = createAdminClient();
-
   // 1. Credenciais
-  const { data: configRow } = await supabase
-    .from('affiliate_config')
-    .select('config')
-    .eq('plataforma', 'shopee')
-    .maybeSingle();
+  const configRow = await prisma.affiliateConfig.findUnique({
+    where: { plataforma: 'shopee' },
+    select: { config: true },
+  });
 
   let appId = process.env.SHOPEE_APP_ID ?? '';
   let secret = process.env.SHOPEE_SECRET ?? '';
@@ -58,7 +45,7 @@ export async function generatePost(
   }
 
   if (!appId || !secret) {
-    await logExec(supabase, 'error', 0, 0, 'Credenciais Shopee ausentes');
+    await logExec('error', 0, 0, 'Credenciais Shopee ausentes');
     return { ok: false, error: 'Credenciais Shopee nao configuradas' };
   }
 
@@ -68,55 +55,46 @@ export async function generatePost(
     pool = await fetchShopeePool(appId, secret, trackingId, 30);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro Shopee';
-    await logExec(supabase, 'error', 0, 0, msg);
+    await logExec('error', 0, 0, msg);
     return { ok: false, error: msg };
   }
 
   if (pool.length < 5) {
-    await logExec(supabase, 'error', pool.length, 0, 'Pool insuficiente (<5)');
+    await logExec('error', pool.length, 0, 'Pool insuficiente (<5)');
     return { ok: false, error: `Pool insuficiente: apenas ${pool.length} produtos` };
   }
 
-  // 3. Upsert produtos
+  // 3. Upsert produtos via Prisma
   const produtosByPlatformId = new Map<string, number>();
   for (const item of pool) {
     const p = item.fetched;
-    const { data: existing } = await supabase
-      .from('produtos')
-      .select('id')
-      .eq('platform_id', p.platform_id)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from('produtos')
-        .update({
+    try {
+      const row = await prisma.produto.upsert({
+        where: { platform_id: p.platform_id },
+        update: {
           nome: p.nome,
           preco_atual: p.preco_atual,
-          preco_original: p.preco_original,
+          preco_original: p.preco_original ?? null,
           desconto_pct: p.desconto_pct,
-          imagem_url: p.imagem_url,
+          imagem_url: p.imagem_url ?? null,
           link_shopee: p.link_shopee,
-        })
-        .eq('id', existing.id);
-      produtosByPlatformId.set(p.platform_id, existing.id);
-    } else {
-      const { data: inserted } = await supabase
-        .from('produtos')
-        .insert({
+        },
+        create: {
           plataforma: 'shopee',
           platform_id: p.platform_id,
           nome: p.nome,
           preco_atual: p.preco_atual,
-          preco_original: p.preco_original,
+          preco_original: p.preco_original ?? null,
           desconto_pct: p.desconto_pct,
-          imagem_url: p.imagem_url,
+          imagem_url: p.imagem_url ?? null,
           link_shopee: p.link_shopee,
-          publicado: true, // produtos referenciados em post curado sao publicaveis
-        })
-        .select('id')
-        .single();
-      if (inserted) produtosByPlatformId.set(p.platform_id, inserted.id);
+          publicado: true,
+        },
+        select: { id: true },
+      });
+      produtosByPlatformId.set(p.platform_id, row.id);
+    } catch {
+      // produto individual falhou; continua
     }
   }
 
@@ -135,11 +113,11 @@ export async function generatePost(
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro GPT-4o';
-    await logExec(supabase, 'error', pool.length, 0, `Curador: ${msg}`);
+    await logExec('error', pool.length, 0, `Curador: ${msg}`);
     return { ok: false, error: msg };
   }
 
-  // 5. Resolve itens -> produto_id; descarta itens cujo platform_id nao bate
+  // 5. Resolve itens -> produto_id
   const itens: PostItem[] = [];
   const produtoIds: number[] = [];
   for (const it of curated.itens) {
@@ -158,45 +136,40 @@ export async function generatePost(
   }
 
   if (itens.length < 3) {
-    await logExec(
-      supabase,
-      'error',
-      pool.length,
-      0,
-      `Curador retornou poucos itens validos (${itens.length})`,
-    );
+    await logExec('error', pool.length, 0, `Curador retornou poucos itens validos (${itens.length})`);
     return { ok: false, error: 'Curador retornou poucos itens validos' };
   }
 
   itens.sort((a, b) => a.posicao - b.posicao);
 
-  // 6. Slug unico
-  const slug = await uniqueSlug(supabase, curated.slug);
+  // 6. Slug unico + insert post
+  const slug = await uniqueSlug(curated.slug);
 
-  const { data: postRow, error: postErr } = await supabase
-    .from('posts')
-    .insert({
-      slug,
-      titulo: curated.titulo,
-      subtitulo: curated.subtitulo ?? null,
-      intro: curated.intro,
-      conclusao: curated.conclusao,
-      angulo: curated.angulo,
-      categoria: curated.categoria,
-      produto_ids: produtoIds,
-      itens,
-      fonte,
-      publicado: true,
-    })
-    .select('id, slug, titulo')
-    .single();
-
-  if (postErr || !postRow) {
-    await logExec(supabase, 'error', pool.length, 0, postErr?.message ?? 'Falha ao inserir post');
-    return { ok: false, error: postErr?.message ?? 'Falha ao inserir post' };
+  let postRow;
+  try {
+    postRow = await prisma.post.create({
+      data: {
+        slug,
+        titulo: curated.titulo,
+        subtitulo: curated.subtitulo ?? null,
+        intro: curated.intro,
+        conclusao: curated.conclusao,
+        angulo: curated.angulo,
+        categoria: curated.categoria,
+        produto_ids: produtoIds,
+        itens,
+        fonte,
+        publicado: true,
+      },
+      select: { id: true, slug: true, titulo: true },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Falha ao inserir post';
+    await logExec('error', pool.length, 0, msg);
+    return { ok: false, error: msg };
   }
 
-  await logExec(supabase, 'success', pool.length, itens.length, null);
+  await logExec('success', pool.length, itens.length, null);
 
   revalidatePath('/');
   revalidatePath('/admin/posts');
@@ -220,18 +193,19 @@ export async function togglePostPublicado(id: number, value: boolean): Promise<A
   } catch {
     return { ok: false, error: 'Nao autorizado' };
   }
-  const supabase = createAdminClient();
-  const { error, data } = await supabase
-    .from('posts')
-    .update({ publicado: value })
-    .eq('id', id)
-    .select('slug')
-    .single();
-  if (error) return { ok: false, error: error.message };
-  revalidatePath('/admin/posts');
-  revalidatePath('/');
-  if (data?.slug) revalidatePath(`/post/${data.slug}`);
-  return { ok: true, data: null };
+  try {
+    const post = await prisma.post.update({
+      where: { id },
+      data: { publicado: value },
+      select: { slug: true },
+    });
+    revalidatePath('/admin/posts');
+    revalidatePath('/');
+    revalidatePath(`/post/${post.slug}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
 }
 
 export async function deletePost(id: number): Promise<ActionResult<null>> {
@@ -240,29 +214,24 @@ export async function deletePost(id: number): Promise<ActionResult<null>> {
   } catch {
     return { ok: false, error: 'Nao autorizado' };
   }
-  const supabase = createAdminClient();
-  const { data: existing } = await supabase.from('posts').select('slug').eq('id', id).maybeSingle();
-  const { error } = await supabase.from('posts').delete().eq('id', id);
-  if (error) return { ok: false, error: error.message };
+  const existing = await prisma.post.findUnique({ where: { id }, select: { slug: true } });
+  try {
+    await prisma.post.delete({ where: { id } });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro' };
+  }
   revalidatePath('/admin/posts');
   revalidatePath('/');
   if (existing?.slug) revalidatePath(`/post/${existing.slug}`);
   return { ok: true, data: null };
 }
 
-async function uniqueSlug(
-  supabase: ReturnType<typeof createAdminClient>,
-  base: string,
-): Promise<string> {
+async function uniqueSlug(base: string): Promise<string> {
   let candidate = base;
   let suffix = 1;
   while (true) {
-    const { data } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('slug', candidate)
-      .maybeSingle();
-    if (!data) return candidate;
+    const existing = await prisma.post.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!existing) return candidate;
     suffix += 1;
     candidate = `${base}-${suffix}`;
     if (suffix > 50) return `${base}-${Date.now()}`;
@@ -270,17 +239,12 @@ async function uniqueSlug(
 }
 
 async function logExec(
-  supabase: ReturnType<typeof createAdminClient>,
   status: 'success' | 'error' | 'partial',
   encontrados: number,
   publicados: number,
   erro: string | null,
 ) {
-  await supabase.from('execucoes_log').insert({
-    plataforma: 'shopee-post',
-    status,
-    produtos_encontrados: encontrados,
-    produtos_publicados: publicados,
-    erro,
+  await prisma.execucaoLog.create({
+    data: { plataforma: 'shopee-post', status, produtos_encontrados: encontrados, produtos_publicados: publicados, erro },
   });
 }

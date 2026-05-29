@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { ExecucaoLogSchema, type ExecucaoLog } from '@/schemas';
 import { colors, fonts } from '@/components/ui/styles';
@@ -7,23 +7,22 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dashboard', robots: { index: false, follow: false } };
 
 async function loadStats() {
-  const supabase = createAdminClient();
-  const [{ count: total }, { count: pub }, { count: semCopy }, logsRes] = await Promise.all([
-    supabase.from('produtos').select('*', { count: 'exact', head: true }),
-    supabase.from('produtos').select('*', { count: 'exact', head: true }).eq('publicado', true),
-    supabase.from('produtos').select('*', { count: 'exact', head: true }).is('copy_gerada', null),
-    supabase.from('execucoes_log').select('*').order('created_at', { ascending: false }).limit(5),
+  const [total, publicados, semCopy, logsRaw] = await prisma.$transaction([
+    prisma.produto.count(),
+    prisma.produto.count({ where: { publicado: true } }),
+    prisma.produto.count({ where: { copy_gerada: null } }),
+    prisma.execucaoLog.findMany({ orderBy: { created_at: 'desc' }, take: 5 }),
   ]);
 
-  const logs = (logsRes.data ?? [])
-    .map((r) => ExecucaoLogSchema.safeParse(r))
+  const logs = logsRaw
+    .map((r) => ExecucaoLogSchema.safeParse(serializeDates(r)))
     .filter((r) => r.success)
     .map((r) => r.data as ExecucaoLog);
 
   return {
-    total: total ?? 0,
-    publicados: pub ?? 0,
-    semCopy: semCopy ?? 0,
+    total,
+    publicados,
+    semCopy,
     ultimaExec: logs[0]?.created_at ?? null,
     logs,
   };

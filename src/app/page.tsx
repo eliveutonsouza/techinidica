@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { ProdutoSchema, CategoriaSchema, PostSchema, type Produto, type Categoria, type Post } from '@/schemas';
 import { ProductCard } from '@/components/product/product-card';
 import { PublicHeader } from '@/components/public/header';
@@ -13,44 +13,27 @@ async function loadData(): Promise<{
   categorias: Categoria[];
   posts: Post[];
 }> {
-  const supabase = await createClient();
-  const [destaquesRes, recentesRes, catsRes, postsRes] = await Promise.all([
-    supabase
-      .from('produtos')
-      .select('*')
-      .eq('publicado', true)
-      .eq('destaque', true)
-      .order('updated_at', { ascending: false })
-      .limit(2),
-    supabase
-      .from('produtos')
-      .select('*')
-      .eq('publicado', true)
-      .order('updated_at', { ascending: false })
-      .limit(9),
-    supabase.from('categorias').select('*').order('ordem'),
-    supabase
-      .from('posts')
-      .select('*')
-      .eq('publicado', true)
-      .order('created_at', { ascending: false })
-      .limit(4),
+  const [destaquesRaw, recentesRaw, catsRaw, postsRaw] = await prisma.$transaction([
+    prisma.produto.findMany({ where: { publicado: true, destaque: true }, orderBy: { updated_at: 'desc' }, take: 2 }),
+    prisma.produto.findMany({ where: { publicado: true }, orderBy: { updated_at: 'desc' }, take: 9 }),
+    prisma.categoria.findMany({ orderBy: { ordem: 'asc' } }),
+    prisma.post.findMany({ where: { publicado: true }, orderBy: { created_at: 'desc' }, take: 4 }),
   ]);
 
-  const destaques = (destaquesRes.data ?? [])
-    .map((p) => ProdutoSchema.safeParse(p))
+  const destaques = destaquesRaw
+    .map((p) => ProdutoSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Produto);
-  const produtos = (recentesRes.data ?? [])
-    .map((p) => ProdutoSchema.safeParse(p))
+  const produtos = recentesRaw
+    .map((p) => ProdutoSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Produto);
-  const categorias = (catsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const categorias = catsRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
-  const posts = (postsRes.data ?? [])
-    .map((p) => PostSchema.safeParse(p))
+  const posts = postsRaw
+    .map((p) => PostSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Post);
 

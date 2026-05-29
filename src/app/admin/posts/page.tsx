@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { PostSchema, type Post } from '@/schemas';
 import { PostsTable } from './posts-table';
@@ -8,13 +8,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Posts', robots: { index: false, follow: false } };
 
 async function load(): Promise<Post[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('posts')
-    .select('*')
-    .order('created_at', { ascending: false });
-  return (data ?? [])
-    .map((p) => PostSchema.safeParse(p))
+  const rows = await prisma.post.findMany({ orderBy: { created_at: 'desc' } });
+  return rows
+    .map((p) => PostSchema.safeParse(serializeDates(p)))
     .filter((r) => r.success)
     .map((r) => r.data as Post);
 }

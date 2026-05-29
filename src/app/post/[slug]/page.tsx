@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { prisma, serializeDates } from '@/lib/prisma';
 import { PostSchema, CategoriaSchema, ProdutoSchema, type Post, type Categoria, type Produto } from '@/schemas';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -14,23 +14,24 @@ type Params = Promise<{ slug: string }>;
 async function load(
   slug: string,
 ): Promise<{ post: Post | null; produtos: Map<number, Produto>; categorias: Categoria[] }> {
-  const supabase = await createClient();
-  const [postRes, catsRes] = await Promise.all([
-    supabase.from('posts').select('*').eq('slug', slug).eq('publicado', true).maybeSingle(),
-    supabase.from('categorias').select('*').order('ordem'),
+  const [postRaw, catsRaw] = await Promise.all([
+    prisma.post.findFirst({ where: { slug, publicado: true } }),
+    prisma.categoria.findMany({ orderBy: { ordem: 'asc' } }),
   ]);
-  const parsed = postRes.data ? PostSchema.safeParse(postRes.data) : null;
+  const parsed = postRaw ? PostSchema.safeParse(serializeDates(postRaw)) : null;
   const post = parsed?.success ? parsed.data : null;
-  const categorias = (catsRes.data ?? [])
-    .map((c) => CategoriaSchema.safeParse(c))
+  const categorias = catsRaw
+    .map((c) => CategoriaSchema.safeParse(serializeDates(c)))
     .filter((r) => r.success)
     .map((r) => r.data as Categoria);
 
-  let produtos = new Map<number, Produto>();
+  const produtos = new Map<number, Produto>();
   if (post && post.produto_ids.length > 0) {
-    const { data: prods } = await supabase.from('produtos').select('*').in('id', post.produto_ids);
-    for (const row of prods ?? []) {
-      const r = ProdutoSchema.safeParse(row);
+    const prodsRaw = await prisma.produto.findMany({
+      where: { id: { in: post.produto_ids as number[] } },
+    });
+    for (const row of prodsRaw) {
+      const r = ProdutoSchema.safeParse(serializeDates(row));
       if (r.success) produtos.set(r.data.id, r.data);
     }
   }
@@ -39,13 +40,10 @@ async function load(
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('posts')
-    .select('titulo, subtitulo, intro')
-    .eq('slug', slug)
-    .eq('publicado', true)
-    .maybeSingle();
+  const data = await prisma.post.findFirst({
+    where: { slug, publicado: true },
+    select: { titulo: true, subtitulo: true, intro: true },
+  });
   if (!data) return { title: 'Post' };
   const description = data.subtitulo ?? data.intro?.slice(0, 160);
   return {

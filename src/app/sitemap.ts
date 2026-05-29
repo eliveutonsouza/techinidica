@@ -1,33 +1,31 @@
 import type { MetadataRoute } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://techinidica.com';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const supabase = await createClient();
-
-  const [catsRes, prodRes, postsRes] = await Promise.all([
-    supabase.from('categorias').select('slug'),
-    supabase.from('produtos').select('id, updated_at').eq('publicado', true),
-    supabase.from('posts').select('slug, updated_at').eq('publicado', true),
+  const [catsRaw, prodRaw, postsRaw] = await prisma.$transaction([
+    prisma.categoria.findMany({ select: { slug: true } }),
+    prisma.produto.findMany({ where: { publicado: true }, select: { id: true, updated_at: true } }),
+    prisma.post.findMany({ where: { publicado: true }, select: { slug: true, updated_at: true } }),
   ]);
 
-  const categorias: MetadataRoute.Sitemap = (catsRes.data ?? []).map((c) => ({
+  const categorias: MetadataRoute.Sitemap = catsRaw.map((c) => ({
     url: `${siteUrl}/categoria/${c.slug}`,
     changeFrequency: 'weekly',
     priority: 0.8,
   }));
 
-  const produtos: MetadataRoute.Sitemap = (prodRes.data ?? []).map((p) => ({
+  const produtos: MetadataRoute.Sitemap = prodRaw.map((p) => ({
     url: `${siteUrl}/produto/${p.id}`,
-    lastModified: new Date(p.updated_at),
+    lastModified: p.updated_at,
     changeFrequency: 'weekly',
     priority: 0.7,
   }));
 
-  const posts: MetadataRoute.Sitemap = (postsRes.data ?? []).map((p) => ({
+  const posts: MetadataRoute.Sitemap = postsRaw.map((p) => ({
     url: `${siteUrl}/post/${p.slug}`,
-    lastModified: new Date(p.updated_at),
+    lastModified: p.updated_at,
     changeFrequency: 'monthly',
     priority: 0.6,
   }));
