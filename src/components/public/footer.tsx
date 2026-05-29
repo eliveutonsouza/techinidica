@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Categoria } from '@/schemas';
 import { AffiliateDisclosure } from '@/components/product/affiliate-disclosure';
+import { NewsletterForm } from './newsletter-form';
 
 export function PublicFooter({ categorias }: { categorias: Categoria[] }) {
   return (
@@ -13,13 +14,8 @@ export function PublicFooter({ categorias }: { categorias: Categoria[] }) {
       }}
     >
       <div
-        style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          display: 'grid',
-          gridTemplateColumns: '1.5fr 1fr 1fr',
-          gap: 32,
-        }}
+        className="grid-footer"
+        style={{ maxWidth: 1200, margin: '0 auto' }}
       >
         <div>
           <div
@@ -103,10 +99,16 @@ export function PublicFooter({ categorias }: { categorias: Categoria[] }) {
                   color: '#94a3b8',
                 }}
               >
-                MVP em construcao
+                <a href="/busca" style={{ color: '#94a3b8', textDecoration: 'none' }}>Busca</a>
               </span>
             </li>
+            <li style={{ marginBottom: 6 }}>
+              <a href="/comparar" style={{ fontFamily: 'DM Sans, system-ui, sans-serif', fontSize: 13, color: '#cbd5e1', textDecoration: 'none' }}>Comparador</a>
+            </li>
           </ul>
+          <div style={{ marginTop: 20 }}>
+            <NewsletterForm />
+          </div>
         </div>
       </div>
       <div
