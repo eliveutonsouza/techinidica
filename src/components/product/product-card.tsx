@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { ProductBadge } from '@/components/ui/badge';
 import { ProductImage } from './product-image';
+import { CompareButton } from './compare-button';
 import type { Produto } from '@/schemas';
 
-export function ProductCard({ produto }: { produto: Produto }) {
+export function ProductCard({ produto, position }: { produto: Produto; position?: number }) {
   return (
     <Link
       href={`/produto/${produto.id}`}
@@ -18,9 +19,24 @@ export function ProductCard({ produto }: { produto: Produto }) {
         flexDirection: 'column',
       }}
     >
-      <ProductImage categoria={produto.categoria} imagemUrl={produto.imagem_url} height={180} rounded={0} />
+      <div style={{ position: 'relative' }}>
+        <ProductImage categoria={produto.categoria} imagemUrl={produto.imagem_url} height={180} rounded={0} />
+        <CompareButton produtoId={produto.id} />
+      </div>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {position != null && (
+            <span
+              style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11,
+                color: '#94a3b8',
+                fontWeight: 600,
+              }}
+            >
+              #{position}
+            </span>
+          )}
           {produto.badge && <ProductBadge kind={produto.badge} />}
           {produto.nota != null && (
             <span
