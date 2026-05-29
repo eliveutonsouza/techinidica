@@ -9,6 +9,7 @@ const NAV = [
   { key: 'posts', label: 'Posts', icon: 'sparkles', href: '/admin/posts' },
   { key: 'automacao', label: 'Automacao', icon: 'zap', href: '/admin/automacao' },
   { key: 'config', label: 'Configuracoes', icon: 'menu', href: '/admin/config' },
+  { key: 'usuarios', label: 'Usuarios', icon: 'user', href: '/admin/usuarios' },
 ] as const;
 
 export function AdminShell({
@@ -18,7 +19,7 @@ export function AdminShell({
   actions,
   children,
 }: {
-  current: 'dashboard' | 'produtos' | 'posts' | 'automacao' | 'config';
+  current: 'dashboard' | 'produtos' | 'posts' | 'automacao' | 'config' | 'usuarios';
   title: string;
   subtitle?: string;
   actions?: ReactNode;
