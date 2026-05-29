@@ -117,6 +117,16 @@ export const DeleteProdutoSchema = z.object({
   id: z.coerce.number(),
 });
 
+export const SetMLLinkSchema = z.object({
+  id: z.coerce.number(),
+  link_mercadolivre: z.string().url('URL inválida').nullable(),
+});
+export type SetMLLinkInput = z.infer<typeof SetMLLinkSchema>;
+
+export const NewsletterSubscribeSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+});
+
 // =============================================================================
 // Shopee API
 // =============================================================================
