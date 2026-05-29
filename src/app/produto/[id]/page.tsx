@@ -44,9 +44,15 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     .maybeSingle();
   if (!data) return { title: 'Produto' };
   return {
-    title: data.nome,
-    description: data.descricao_curta ?? undefined,
-    openGraph: data.imagem_url ? { images: [data.imagem_url] } : undefined,
+    title: `${data.nome} — Vale a pena? Análise completa`,
+    description: data.descricao_curta
+      ? `${data.descricao_curta} Veja a ficha técnica completa, prós e contras e compare preços na Shopee e Mercado Livre.`
+      : `Análise técnica completa com especificações, prós, contras e onde comprar pelo menor preço.`,
+    openGraph: {
+      title: `${data.nome} | TechIndica`,
+      description: data.descricao_curta ?? undefined,
+      images: data.imagem_url ? [{ url: data.imagem_url, width: 800, height: 800 }] : undefined,
+    },
   };
 }
 
@@ -59,8 +65,8 @@ export default async function ProdutoPage({ params }: { params: Params }) {
     <>
       <PublicHeader categorias={categorias} />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'start' }}>
-          <div style={{ position: 'sticky', top: 84 }}>
+        <div className="grid-produto">
+          <div className="produto-sticky">
             <ProductImage
               categoria={produto.categoria}
               imagemUrl={produto.imagem_url}
@@ -205,6 +211,7 @@ export default async function ProdutoPage({ params }: { params: Params }) {
             >
               Ficha tecnica
             </h2>
+            <div className="specs-table-wrap">
             <table
               style={{
                 width: '100%',
@@ -212,6 +219,7 @@ export default async function ProdutoPage({ params }: { params: Params }) {
                 borderCollapse: 'collapse',
                 fontFamily: 'DM Sans, system-ui, sans-serif',
                 fontSize: 14,
+                minWidth: 280,
               }}
             >
               <tbody>
@@ -223,11 +231,12 @@ export default async function ProdutoPage({ params }: { params: Params }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
         )}
 
         {(produto.pros.length > 0 || produto.contras.length > 0) && (
-          <section style={{ marginTop: 40, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 760 }}>
+          <section className="grid-pros-contras" style={{ marginTop: 40 }}>
             <div>
               <h3
                 style={{

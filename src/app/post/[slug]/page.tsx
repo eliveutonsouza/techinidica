@@ -47,9 +47,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     .eq('publicado', true)
     .maybeSingle();
   if (!data) return { title: 'Post' };
+  const description = data.subtitulo ?? data.intro?.slice(0, 160);
   return {
     title: data.titulo,
-    description: data.subtitulo ?? data.intro?.slice(0, 160),
+    description,
+    openGraph: {
+      title: `${data.titulo} | TechIndica`,
+      description: description ?? undefined,
+    },
   };
 }
 
@@ -124,15 +129,12 @@ export default async function PostPage({ params }: { params: Params }) {
             return (
               <article
                 key={item.produto_id}
+                className="grid-post-item"
                 style={{
                   background: '#fff',
                   border: '1px solid #e5e7eb',
                   borderRadius: 14,
                   padding: 20,
-                  display: 'grid',
-                  gridTemplateColumns: '160px 1fr',
-                  gap: 20,
-                  alignItems: 'start',
                 }}
               >
                 <div>
@@ -156,7 +158,7 @@ export default async function PostPage({ params }: { params: Params }) {
                     }}
                   >
                     #{item.posicao}
-                    {produto?.preco_atual != null && (
+                    {produto?.preco_atual != null && produto.preco_atual > 0 && (
                       <span style={{ color: '#0f172a', fontWeight: 600 }}>
                         R$ {Number(produto.preco_atual).toFixed(2).replace('.', ',')}
                       </span>
