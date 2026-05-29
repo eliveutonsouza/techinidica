@@ -15,17 +15,26 @@ function resolveSiteUrl(): URL {
 
 export const metadata: Metadata = {
   title: {
-    default: 'TechIndica · Recomendacoes de tecnologia',
-    template: '%s · TechIndica',
+    default: 'TechIndica — Melhores produtos de tecnologia',
+    template: '%s | TechIndica',
   },
   description:
-    'Curadoria de produtos de tecnologia: smartwatches, fones, notebooks e mais. Com links de afiliado Shopee e Mercado Livre.',
+    'Curadoria de produtos de tecnologia: smartwatches, fones, notebooks e mais. Recomendações técnicas honestas com análise de custo-benefício e links de afiliado.',
   metadataBase: resolveSiteUrl(),
+  openGraph: {
+    siteName: 'TechIndica',
+    locale: 'pt_BR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@techinidica',
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -33,6 +42,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
+        {process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN && (
+          <script
+            defer
+            data-domain={process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN}
+            src="https://plausible.io/js/script.js"
+          />
+        )}
       </head>
       <body>{children}</body>
     </html>
